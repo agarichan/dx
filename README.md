@@ -28,6 +28,19 @@ Downloads the latest release binary (darwin/linux, arm64/amd64, checksum-verifie
 dx update
 ```
 
+Or with [mise](https://mise.jdx.dev):
+
+```
+mise use -g "github:agarichan/dx"    # global (recommended)
+mise use "github:agarichan/dx"       # or pin per project in mise.toml [tools]
+```
+
+mise downloads the release binary for your platform. Notes:
+
+- Right after a dx release, mise's `minimum_release_age` guard (when enabled) rejects it — prefix with `MISE_MINIMUM_RELEASE_AGE=0` to install anyway.
+- **Raycast users**: the extension spawns dx outside any project directory, so a *project-pinned* dx is not resolvable there. Install globally (`-g`) and set the extension's `dx binary path` preference to `~/.local/share/mise/shims/dx` — or just also run the curl installer for a global copy.
+- With dx as a mise-managed tool, mise `[env]` cannot call `{{ exec(command='dx db url') }}` (tool paths aren't resolved yet at env-eval time). Use `db_env` and `dx exec` instead — see [Configuration](#configuration--dxtoml).
+
 Or with Go:
 
 ```

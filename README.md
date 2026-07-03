@@ -140,13 +140,14 @@ volume    = "myapp-pgdata"     # named volume for dx db up
 [service.api]
 name    = "myapp-api"          # portless registration base name (defaults to key "api" if omitted)
 command = ["uvicorn", "app:app", "--port", "{port}", "--reload"]
-db      = true                 # idempotent DB fork for worktrees (requires [db])
+db_env  = { name = "APP_DATABASE_URL", scheme = "postgresql+psycopg" }  # inject per-checkout DSN (implies worktree DB fork)
 dir     = "api"                # run in <repo root>/api
 pub     = { API_URL = "self", WEBAPP_URL = "web" }
 
 [service.web]
 # name omitted → defaults to key "web" (portless name: web / web-<branch>)
 command  = ["vite", "--port", "{port}"]
+open     = true                # the URL UIs open (Raycast row ⏎); max 1 per config
 dir      = "webapp"            # run in <repo root>/webapp
 internal = { VITE_API_URL = "api" }   # "api" is the key of the api service above
 ```

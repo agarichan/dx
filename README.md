@@ -273,9 +273,9 @@ DATABASE_URL = "{{ exec(command='dx db url') }}"
 
 **`dx serve` and DB env**: `dx serve` does **not** rewrite the DB env var in the child process environment. The child process inherits whatever env mise has already set (including the `{{ exec }}`-resolved `DATABASE_URL`). The `service[].db = true` flag only triggers an idempotent DB fork — it does not modify the env.
 
-### `dx worktree <subcommand>`
+### `dx worktree <subcommand>` (alias: `dx wt`)
 
-Manage the full lifecycle of git worktrees: create, remove, and list. All worktree subcommands must be run from the **primary checkout**.
+Manage the full lifecycle of git worktrees: create, remove, and list. All worktree subcommands must be run from the **primary checkout**. `wt` works everywhere `worktree` does (e.g. `dx wt create feat-x`).
 
 #### `dx worktree create <branch> [--from <base-branch>] [--skip-init]`
 

@@ -23,7 +23,7 @@ COMMANDS:
   logs [name|key] [-f] [-t] [--no-color]
                               tail logs, colored per-service prefix; -f to follow
   db <sub>                    DB: up|down|psql|fork|drop|reset|list|url   ([db] from dx.toml)
-  worktree <sub>              worktree: create|rm|list
+  worktree <sub>              worktree: create|rm|list (alias: wt)
   raycast <sub>               Raycast extension: install|uninstall
   update [--force]            self-update to the latest GitHub release
   version                     print version
@@ -144,7 +144,7 @@ Config: [db] section in dx.toml at repo root.
 const worktreeHelp = `dx worktree — manage git worktrees
 
 USAGE:
-  dx worktree <sub>
+  dx worktree <sub>    (alias: dx wt <sub>)
 
 SUBCOMMANDS:
   create <branch> [--from <base>] [--skip-init]
@@ -241,7 +241,7 @@ func helpFor(cmd string) string {
 		return stopHelp
 	case "db":
 		return dbHelp
-	case "worktree":
+	case "worktree", "wt":
 		return worktreeHelp
 	case "raycast":
 		return raycastHelp
@@ -289,7 +289,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runStatus(args[1:], stdout, stderr)
 	case "stop":
 		return runStop(args[1:], stdout, stderr)
-	case "worktree":
+	case "worktree", "wt":
 		return runWorktree(args[1:], stdout, stderr)
 	case "raycast":
 		return runRaycast(args[1:], stdout, stderr)

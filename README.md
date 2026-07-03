@@ -1,6 +1,6 @@
 # dx
 
-A developer-experience CLI that wraps [portless](https://portless.dev) and Docker to manage local dev services and per-worktree Postgres databases.
+A developer-experience CLI that wraps [portless](https://portless.sh) and Docker to manage local dev services and per-worktree Postgres databases.
 
 - **Stable HTTPS URLs** for every dev service (`https://api.localhost`) via portless — no port juggling
 - **One command** (`dx up`) starts your whole stack in the background, idempotently

@@ -2,17 +2,12 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { homedir } from "node:os";
 import { getPreferenceValues } from "@raycast/api";
+import { Service } from "./group";
+
+export { groupByRoot } from "./group";
+export type { Service, Env, EnvState } from "./group";
 
 const pExecFile = promisify(execFile);
-
-export interface Service {
-  name: string;
-  root: string;
-  state: "running" | "stopped";
-  pid: number;
-  url: string;
-  log: string;
-}
 
 function dxBin(): string {
   const { dxPath } = getPreferenceValues<{ dxPath?: string }>();

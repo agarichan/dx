@@ -155,6 +155,7 @@ Services are declared as `[service.<key>]` map entries. The key is used:
 | `service.<key>.dir` | string | optional (default: repo root) | Working directory for the service process, relative to the repo root. Omit to use the repo root. |
 | `service.<key>.pub` | table | optional | `ENV = ref`. Injects the public URL of `ref` as `ENV`. `ref` is another service's key, `"self"` for the current service, or a literal portless base name as fallback. |
 | `service.<key>.internal` | table | optional | Same as `pub` but injects the internal URL. |
+| `service.<key>.open` | bool | optional | Marks the service whose URL UIs open (max 1 per config). The Raycast extension shows one row per checkout and opens this service's URL; other services appear as status dots. Unset: single service → that one; otherwise the alphabetically-first name. |
 
 ## Commands
 

@@ -1,15 +1,39 @@
 import { useEffect, useState } from "react";
 import { ActionPanel, Action, List, Icon, Color, showToast, Toast } from "@raycast/api";
-import { listServices, stopService, Service } from "./dx";
+import { homedir } from "node:os";
+import { listServices, stopService, groupByRoot, Env, Service } from "./dx";
+
+const stateColor: Record<Env["state"], Color> = {
+  running: Color.Green,
+  partial: Color.Yellow,
+  stopped: Color.SecondaryText,
+};
+
+function tilde(p: string): string {
+  const home = homedir();
+  return p.startsWith(home) ? "~" + p.slice(home.length) : p;
+}
+
+// One dot per service: green when running, label = dx.toml key (fallback: name).
+function dots(env: Env): List.Item.Accessory[] {
+  return env.services.map((svc) => ({
+    icon: {
+      source: svc.state === "running" ? Icon.CircleFilled : Icon.Circle,
+      tintColor: svc.state === "running" ? Color.Green : Color.SecondaryText,
+    },
+    text: svc.key || svc.name,
+    tooltip: `${svc.name}: ${svc.state} (pid ${svc.pid})`,
+  }));
+}
 
 export default function Command() {
-  const [items, setItems] = useState<Service[]>([]);
+  const [envs, setEnvs] = useState<Env[]>([]);
   const [loading, setLoading] = useState(true);
 
   async function refresh() {
     setLoading(true);
     try {
-      setItems(await listServices());
+      setEnvs(groupByRoot(await listServices()));
     } catch (e) {
       await showToast({ style: Toast.Style.Failure, title: "dx status failed", message: String(e) });
     } finally {
@@ -21,11 +45,13 @@ export default function Command() {
     refresh();
   }, []);
 
-  async function onStop(svc: Service) {
-    await showToast({ style: Toast.Style.Animated, title: `Stopping ${svc.name}…` });
+  async function stopMany(services: Service[], label: string) {
+    await showToast({ style: Toast.Style.Animated, title: `Stopping ${label}…` });
     try {
-      await stopService(svc.name);
-      await showToast({ style: Toast.Style.Success, title: `Stopped ${svc.name}` });
+      for (const svc of services) {
+        if (svc.state === "running") await stopService(svc.name);
+      }
+      await showToast({ style: Toast.Style.Success, title: `Stopped ${label}` });
       await refresh();
     } catch (e) {
       await showToast({ style: Toast.Style.Failure, title: "Stop failed", message: String(e) });
@@ -35,27 +61,34 @@ export default function Command() {
   return (
     <List isLoading={loading}>
       <List.EmptyView title="No dx services" description="起動中の dx サービスはありません" />
-      {items.map((svc) => (
+      {envs.map((env) => (
         <List.Item
-          key={svc.name}
-          icon={{
-            source: svc.state === "running" ? Icon.CircleFilled : Icon.Circle,
-            tintColor: svc.state === "running" ? Color.Green : Color.SecondaryText,
-          }}
-          title={svc.name}
-          subtitle={svc.root}
-          accessories={[{ tag: svc.state }, { text: `pid ${svc.pid}` }]}
+          key={env.root}
+          icon={{ source: Icon.CircleFilled, tintColor: stateColor[env.state] }}
+          title={env.openSvc.name}
+          subtitle={tilde(env.root)}
+          accessories={dots(env)}
           actions={
             <ActionPanel>
-              {svc.url ? <Action.OpenInBrowser url={svc.url} /> : null}
+              {env.openSvc.url ? <Action.OpenInBrowser url={env.openSvc.url} /> : null}
+              {env.openSvc.url ? <Action.CopyToClipboard title="Copy URL" content={env.openSvc.url} /> : null}
               <Action
-                title="Stop Service"
+                title="Stop All in Env"
                 icon={Icon.Stop}
                 style={Action.Style.Destructive}
                 shortcut={{ modifiers: ["cmd"], key: "x" }}
-                onAction={() => onStop(svc)}
+                onAction={() => stopMany(env.services, env.openSvc.name)}
               />
-              {svc.url ? <Action.CopyToClipboard title="Copy URL" content={svc.url} /> : null}
+              <ActionPanel.Submenu title="Stop Service…" icon={Icon.StopFilled}>
+                {env.services.map((svc) => (
+                  <Action
+                    key={svc.name}
+                    title={`Stop ${svc.key || svc.name}`}
+                    style={Action.Style.Destructive}
+                    onAction={() => stopMany([svc], svc.name)}
+                  />
+                ))}
+              </ActionPanel.Submenu>
               <Action
                 title="Refresh"
                 icon={Icon.ArrowClockwise}

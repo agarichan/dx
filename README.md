@@ -37,7 +37,6 @@ mise use "github:agarichan/dx"       # or pin per project in mise.toml [tools]
 
 mise downloads the release binary for your platform. Notes:
 
-- Right after a dx release, mise's `minimum_release_age` guard (when enabled) rejects it — prefix with `MISE_MINIMUM_RELEASE_AGE=0` to install anyway.
 - **Raycast users**: the extension spawns dx outside any project directory, so a *project-pinned* dx is not resolvable there. Install globally (`-g`) and set the extension's `dx binary path` preference to `~/.local/share/mise/shims/dx` — or just also run the curl installer for a global copy.
 - With dx as a mise-managed tool, mise `[env]` cannot call `{{ exec(command='dx db url') }}` (tool paths aren't resolved yet at env-eval time). Use `db_env` and `dx exec` instead — see [Configuration](#configuration--dxtoml).
 
@@ -171,7 +170,7 @@ Services are declared as `[service.<key>]` map entries. The key is used:
 | `db.engine` | string | optional (default `postgres`) | `postgres` or `sqlite`. SQLite needs no Docker: the DB is a checkout-relative file, `fork` seeds a new worktree's file from the primary (`sqlite3 .backup`), `up`/`down` are no-ops, `psql` opens a `sqlite3` shell, and `url` prints `sqlite:///<abs path>` for the current checkout. |
 | `db.path` | string | required if `engine = "sqlite"` | DB file path relative to the checkout root (e.g. `dev.db`). Postgres-only fields (`container`/`dsn`/`url_env`/`image`/`volume`) must be unset. |
 | `db.container` | string | required for postgres | Docker container name |
-| `db.dsn` | string | `dsn` or `url_env` required | Inline base DSN. Preferred when using `dx db url` with the mise `{{ exec }}` pattern to avoid recursive env evaluation. |
+| `db.dsn` | string | `dsn` or `url_env` required | Inline base DSN (dev credentials are typically non-secret; keep secrets in an env var via `url_env` instead). |
 | `db.url_env` | string | `dsn` or `url_env` required | Env var name holding the base DSN. Used as fallback when `dsn` is empty. |
 | `db.image` | string | optional (default `postgres:18`) | Image for `dx db up` |
 | `db.volume` | string | required for `dx db up` | Named volume for data persistence |
@@ -179,7 +178,7 @@ Services are declared as `[service.<key>]` map entries. The key is used:
 | `service.<key>.name` | string | optional (defaults to `<key>`) | Portless registration base name (e.g. `myapp-api`). Primary uses this name; linked worktrees get `<name>-<branch>`. Omit to use the key itself. |
 | `service.<key>.command` | string array | required | argv. `{port}` is replaced with the port allocated by dx. Shell is not involved. |
 | `service.<key>.db` | bool | optional | If true, perform an idempotent DB fork for the worktree (no-op on primary). The child process inherits the DB env as set by mise — `dx serve` does not rewrite it. Requires `[db]`. |
-| `service.<key>.db_env` | table | optional | `{ name = "APP_DATABASE_URL", scheme = "postgresql+psycopg" }`. `dx serve` injects the per-checkout DSN (same derivation as `dx db url`) into the child env as `name`; `scheme` optionally overrides the DSN scheme (e.g. `sqlite+aiosqlite`). Implies the fork/seed behavior of `db = true`. Requires `[db]`. Prefer this over the mise `{{ exec }}` pattern — it also works when dx itself is a mise-managed tool. |
+| `service.<key>.db_env` | table | optional | `{ name = "APP_DATABASE_URL", scheme = "postgresql+psycopg" }`. `dx serve` injects the per-checkout DSN (same derivation as `dx db url`) into the child env as `name`; `scheme` optionally overrides the DSN scheme (e.g. `sqlite+aiosqlite`). Implies the fork/seed behavior of `db = true`. Requires `[db]`. Works regardless of how dx is installed (including as a mise-managed tool). |
 | `service.<key>.dir` | string | optional (default: repo root) | Working directory for the service process, relative to the repo root. Omit to use the repo root. |
 | `service.<key>.pub` | table | optional | `ENV = ref`. Injects the public URL of `ref` as `ENV`. `ref` is another service's key, `"self"` for the current service, or a literal portless base name as fallback. |
 | `service.<key>.internal` | table | optional | Same as `pub` but injects the internal URL. |
@@ -262,7 +261,7 @@ Manage the Postgres container and per-worktree databases. Configuration comes fr
 
 `fork` and `reset` are rejected on a primary checkout — run them from a linked worktree.
 
-**SQLite engine** — with `engine = "sqlite"` the same subcommands operate on the checkout-relative file instead of a container: `fork` copies the primary's file into the worktree (consistent snapshot via `sqlite3 .backup`, idempotent), `drop`/`reset` remove/re-seed it, `list` shows the file per worktree, and `up`/`down` do nothing. `dx worktree rm` needs no DB drop (the file lives inside the worktree). Apps that read the DSN from an env var work with the same `{{ exec(command='dx db url') }}` pattern — `dx db url` prints `sqlite:///<abs path>` for the current checkout. Requires `sqlite3` on `$PATH` (preinstalled on macOS).
+**SQLite engine** — with `engine = "sqlite"` the same subcommands operate on the checkout-relative file instead of a container: `fork` copies the primary's file into the worktree (consistent snapshot via `sqlite3 .backup`, idempotent), `drop`/`reset` remove/re-seed it, `list` shows the file per worktree, and `up`/`down` do nothing. `dx worktree rm` needs no DB drop (the file lives inside the worktree). Apps that read the DSN from an env var get it via `db_env` (services) or `dx exec` (tasks) — `dx db url` prints `sqlite:///<abs path>` for the current checkout. Requires `sqlite3` on `$PATH` (preinstalled on macOS).
 
 #### `dx db url [--scheme <s>]` — per-checkout DSN
 
@@ -285,28 +284,21 @@ command = ["uvicorn", "app:app", "--port", "{port}"]
 db_env  = { name = "APP_DATABASE_URL", scheme = "postgresql+psycopg" }
 ```
 
-**mise `{{ exec }}` pattern** — for mise *tasks* (migrations etc.), `dx db url` can be wired into `mise.toml`:
+**Tasks (migrations etc.)** — run them through `dx exec` so they get the same env and dir as the service:
 
 ```toml
 # mise.toml
-[env]
-DATABASE_URL = "{{ exec(command='dx db url') }}"
+[tasks.migrate]
+run = "dx exec api -- alembic upgrade head"   # api's env (db_env DSN) + api's dir
 ```
 
-> **Warning**: the `[env]` + `{{ exec }}` pattern does NOT work when dx itself is installed as a mise tool (`github:agarichan/dx` in `[tools]`) — mise evaluates `[env]` before tool paths are resolved, so `dx` is not found. In that setup use `db_env` for services and `dx exec` for tasks:
->
-> ```toml
-> [tasks.migrate]
-> run = "dx exec api -- alembic upgrade head"   # api's env (db_env DSN) + api's dir
-> ```
+Do **not** wire `dx db url` into mise `[env]` via `{{ exec }}` — it breaks when dx itself is a mise-managed tool (mise evaluates `[env]` before tool paths are resolved). For ad-hoc shell use, `$(dx db url)` works fine.
 
 ### `dx exec <key> [--] <command...>`
 
 Run any command in a service's environment: the same env `dx serve` injects (pub/internal URLs, `db_env` DSN, `FORCE_COLOR`) and the service's working dir. On a linked worktree the idempotent DB fork/seed runs first, so `dx exec api -- alembic upgrade head` works immediately after `dx worktree create`. The child's exit code is propagated.
 
-**Recursion avoidance**: if `url_env` in `dx.toml` references the same env var that the `{{ exec }}` pattern sets, recursive evaluation will occur. Avoid this by using the inline `dsn` field in `dx.toml` instead of `url_env`. With `dsn`, dx reads the DSN directly from the config file and never touches the env during `dx db url`.
-
-**`dx serve` and DB env**: `dx serve` does **not** rewrite the DB env var in the child process environment. The child process inherits whatever env mise has already set (including the `{{ exec }}`-resolved `DATABASE_URL`). The `service[].db = true` flag only triggers an idempotent DB fork — it does not modify the env.
+**`dx serve` and DB env**: with `db_env` declared, `dx serve`/`dx exec` inject the DSN themselves. Plain `db = true` only triggers the idempotent fork — the child inherits whatever DB env the parent set.
 
 ### `dx worktree <subcommand>` (alias: `dx wt`)
 

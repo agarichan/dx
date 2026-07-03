@@ -96,20 +96,19 @@ extension.
 
 ## Environment Variables
 
-With zero configuration dx matches plain portless (`portless proxy start`, HTTPS on 443): every service gets `https://<svc>.localhost`, and `pub` URLs fall back to the internal form. Set these only if you run a custom local TLD, a non-default proxy port, or an externally reachable domain (e.g. via Tailscale or a reverse proxy).
+dx follows your running portless proxy automatically: it reads `~/.portless/proxy.{tld,port,tls}` (written by `portless proxy start`), so custom ports (`-p 1355`), custom TLDs (`--tld lan`), and `--no-tls` all produce correct URLs with zero configuration. Resolution order per field: env var → portless state → static default (`localhost` / `443` / https).
 
 | Variable | Default | Description |
 |---|---|---|
-| `DX_PUBLIC_DOMAIN` | *(unset)* | Domain suffix for public URLs (`<svc>.<domain>`). Unset: public URLs fall back to the internal URL. |
-| `DX_INTERNAL_DOMAIN` | `localhost` | TLD for internal URLs (`<svc>.<domain>`) |
-| `DX_PROXY_PORT` | `443` | Port portless listens on. `443` is omitted from generated URLs. |
+| `DX_PUBLIC_DOMAIN` | *(unset)* | Domain suffix for public URLs (`<svc>.<domain>`), e.g. an externally reachable domain via Tailscale or a reverse proxy. Unset: public URLs fall back to the internal URL. No autodetection (portless has no state for this). |
+| `DX_INTERNAL_DOMAIN` | autodetected, else `localhost` | TLD for internal URLs (`<svc>.<domain>`) |
+| `DX_PROXY_PORT` | autodetected, else `443` | Port portless listens on. Omitted from URLs for https:443 / http:80. |
 
-Example — custom TLD `.lan` on port 1355 plus a public wildcard domain:
+Example — public wildcard domain on top of an autodetected `.lan:1355` proxy:
 
 ```sh
-export DX_INTERNAL_DOMAIN=lan      # internal: https://<svc>.lan:1355
-export DX_PROXY_PORT=1355
 export DX_PUBLIC_DOMAIN=dev.example.com  # pub: https://<svc>.dev.example.com
+                                         # internal stays https://<svc>.lan:1355 (from ~/.portless)
 ```
 
 ## Configuration — dx.toml

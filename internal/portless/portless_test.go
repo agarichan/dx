@@ -107,3 +107,26 @@ func TestFreePort(t *testing.T) {
 		t.Fatalf("port out of range: %d", p)
 	}
 }
+
+func TestURLInternal_HTTPScheme(t *testing.T) {
+	c := Client{R: config.Routing{InternalDomain: "localhost", ProxyPort: "8080", Scheme: "http"}}
+	if got := c.URLInternal("app"); got != "http://app.localhost:8080" {
+		t.Errorf("http custom port = %q", got)
+	}
+	c = Client{R: config.Routing{InternalDomain: "localhost", ProxyPort: "80", Scheme: "http"}}
+	if got := c.URLInternal("app"); got != "http://app.localhost" {
+		t.Errorf("http:80 must omit port = %q", got)
+	}
+	// https:80 は省略しない(変則構成の明示)
+	c = Client{R: config.Routing{InternalDomain: "localhost", ProxyPort: "80", Scheme: "https"}}
+	if got := c.URLInternal("app"); got != "https://app.localhost:80" {
+		t.Errorf("https:80 keeps port = %q", got)
+	}
+}
+
+func TestURLPublic_AlwaysHTTPS(t *testing.T) {
+	c := Client{R: config.Routing{PublicDomain: "dev.example.com", InternalDomain: "localhost", ProxyPort: "1355", Scheme: "http"}}
+	if got := c.URLPublic("app"); got != "https://app.dev.example.com" {
+		t.Errorf("public = %q", got)
+	}
+}

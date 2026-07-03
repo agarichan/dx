@@ -94,8 +94,12 @@ func (c Client) URLPublic(name string) string {
 }
 
 func (c Client) URLInternal(name string) string {
-	u := "https://" + name + "." + c.R.InternalDomain
-	if c.R.ProxyPort == "443" {
+	scheme := c.R.Scheme
+	if scheme == "" {
+		scheme = "https"
+	}
+	u := scheme + "://" + name + "." + c.R.InternalDomain
+	if (scheme == "https" && c.R.ProxyPort == "443") || (scheme == "http" && c.R.ProxyPort == "80") {
 		return u
 	}
 	return u + ":" + c.R.ProxyPort

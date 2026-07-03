@@ -251,16 +251,18 @@ Manage the Postgres container and per-worktree databases. Configuration comes fr
 
 **SQLite engine** — with `engine = "sqlite"` the same subcommands operate on the checkout-relative file instead of a container: `fork` copies the primary's file into the worktree (consistent snapshot via `sqlite3 .backup`, idempotent), `drop`/`reset` remove/re-seed it, `list` shows the file per worktree, and `up`/`down` do nothing. `dx worktree rm` needs no DB drop (the file lives inside the worktree). Apps that read the DSN from an env var work with the same `{{ exec(command='dx db url') }}` pattern — `dx db url` prints `sqlite:///<abs path>` for the current checkout. Requires `sqlite3` on `$PATH` (preinstalled on macOS).
 
-#### `dx db url` — per-checkout DSN
+#### `dx db url [--scheme <s>]` — per-checkout DSN
 
 Prints the full connection URL for the current checkout:
 
 ```
 $ dx db url
 postgres://myapp:pw@localhost:5432/myapp_feat_x
+$ dx db url --scheme postgresql+psycopg
+postgresql+psycopg://myapp:pw@localhost:5432/myapp_feat_x
 ```
 
-The DB name is derived from the current worktree branch. On the primary checkout it returns the base DSN unchanged.
+The DB name is derived from the current worktree branch. On the primary checkout it returns the base DSN unchanged. `--scheme` overrides the DSN scheme (also for sqlite, e.g. `sqlite+aiosqlite`).
 
 **Injecting the DSN into services** — declare `db_env` on the service; `dx serve` sets the env var to the per-checkout DSN:
 
@@ -278,7 +280,16 @@ db_env  = { name = "APP_DATABASE_URL", scheme = "postgresql+psycopg" }
 DATABASE_URL = "{{ exec(command='dx db url') }}"
 ```
 
-> **Warning**: the `[env]` + `{{ exec }}` pattern does NOT work when dx itself is installed as a mise tool (`github:agarichan/dx` in `[tools]`) — mise evaluates `[env]` before tool paths are resolved, so `dx` is not found. In that setup use `db_env` for services, and call `dx db url` inside the task itself (e.g. `DATABASE_URL=$(dx db url) alembic upgrade head`).
+> **Warning**: the `[env]` + `{{ exec }}` pattern does NOT work when dx itself is installed as a mise tool (`github:agarichan/dx` in `[tools]`) — mise evaluates `[env]` before tool paths are resolved, so `dx` is not found. In that setup use `db_env` for services and `dx exec` for tasks:
+>
+> ```toml
+> [tasks.migrate]
+> run = "dx exec api -- alembic upgrade head"   # api's env (db_env DSN) + api's dir
+> ```
+
+### `dx exec <key> [--] <command...>`
+
+Run any command in a service's environment: the same env `dx serve` injects (pub/internal URLs, `db_env` DSN, `FORCE_COLOR`) and the service's working dir. On a linked worktree the idempotent DB fork/seed runs first, so `dx exec api -- alembic upgrade head` works immediately after `dx worktree create`. The child's exit code is propagated.
 
 **Recursion avoidance**: if `url_env` in `dx.toml` references the same env var that the `{{ exec }}` pattern sets, recursive evaluation will occur. Avoid this by using the inline `dsn` field in `dx.toml` instead of `url_env`. With `dsn`, dx reads the DSN directly from the config file and never touches the env during `dx db url`.
 

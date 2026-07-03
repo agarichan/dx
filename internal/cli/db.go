@@ -58,6 +58,24 @@ func containerFor(cfg *project.Config) (db.Container, string, error) {
 	return db.Container{Name: cfg.DB.Container, Image: cfg.DB.Image, Volume: cfg.DB.Volume, DSN: base}, base.Name, nil
 }
 
+// urlScheme parses `dx db url` flags (--scheme <value>); other flags error.
+func urlScheme(args []string) (string, error) {
+	scheme := ""
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--scheme":
+			if i+1 >= len(args) {
+				return "", fmt.Errorf("--scheme requires a value")
+			}
+			scheme = args[i+1]
+			i++
+		default:
+			return "", fmt.Errorf("unknown flag for dx db url: %s", args[i])
+		}
+	}
+	return scheme, nil
+}
+
 // runDB implements the `dx db <sub>` dispatcher (config from dx.toml).
 func runDB(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
@@ -65,13 +83,22 @@ func runDB(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	sub := args[0]
+	scheme := ""
+	if sub == "url" {
+		s, err := urlScheme(args[1:])
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+		scheme = s
+	}
 	cfg, wt, err := loadConfig()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	if cfg.DB.SQLite() {
-		return runDBSQLite(sub, cfg, wt, stdout, stderr)
+		return runDBSQLite(sub, cfg, wt, scheme, stdout, stderr)
 	}
 	c, baseName, err := containerFor(cfg)
 	if err != nil {
@@ -87,7 +114,11 @@ func runDB(args []string, stdout, stderr io.Writer) int {
 
 	switch sub {
 	case "url":
-		fmt.Fprintln(stdout, c.DSN.WithName(target).String())
+		d := c.DSN.WithName(target)
+		if scheme != "" {
+			d = d.WithScheme(scheme)
+		}
+		fmt.Fprintln(stdout, d.String())
 		return 0
 	case "up":
 		err = c.Up(dockerRunner)

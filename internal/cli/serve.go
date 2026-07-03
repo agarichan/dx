@@ -115,6 +115,32 @@ func serviceDir(cfg *project.Config, svc project.Service) string {
 	return filepath.Join(cfg.Root, svc.Dir)
 }
 
+// ensureServiceDB runs the idempotent worktree DB fork/seed for services that
+// want a DB (db=true or db_env). Failures are warnings — callers proceed.
+// No-op on the primary checkout or when the service declares no DB.
+func ensureServiceDB(cfg *project.Config, svc project.Service, wt *worktree.Info, stderr io.Writer) {
+	if (!svc.DB && svc.DBEnv == nil) || cfg.DB == nil || wt.IsPrimary {
+		return
+	}
+	if cfg.DB.SQLite() {
+		s := db.SQLite{Path: cfg.DB.Path}
+		if ferr := s.Seed(dockerRunner, wt.PrimaryRoot, wt.Toplevel); ferr != nil {
+			fmt.Fprintln(stderr, "warning: db seed failed:", ferr)
+		}
+		return
+	}
+	base, err := baseDSN(cfg)
+	if err != nil {
+		fmt.Fprintln(stderr, "warning: db fork skipped:", err)
+		return
+	}
+	target := worktree.DBName(base.Name, wt.Branch, wt.IsPrimary)
+	c := db.Container{Name: cfg.DB.Container, Image: cfg.DB.Image, Volume: cfg.DB.Volume, DSN: base}
+	if ferr := c.Fork(dockerRunner, base.Name, target); ferr != nil {
+		fmt.Fprintln(stderr, "warning: db fork failed:", ferr)
+	}
+}
+
 // startService starts one service (background) and records it in the registry.
 // Idempotent: no-op if the portless name is already alive.
 func startService(cfg *project.Config, svc project.Service, wt *worktree.Info,
@@ -123,25 +149,7 @@ func startService(cfg *project.Config, svc project.Service, wt *worktree.Info,
 	if err != nil {
 		return err
 	}
-	wantsDB := svc.DB || svc.DBEnv != nil
-	if wantsDB && cfg.DB != nil && !wt.IsPrimary {
-		if cfg.DB.SQLite() {
-			s := db.SQLite{Path: cfg.DB.Path}
-			if ferr := s.Seed(dockerRunner, wt.PrimaryRoot, wt.Toplevel); ferr != nil {
-				fmt.Fprintln(stderr, "warning: db seed failed:", ferr)
-			}
-		} else {
-			base, err := baseDSN(cfg)
-			if err != nil {
-				return err
-			}
-			target := worktree.DBName(base.Name, wt.Branch, wt.IsPrimary)
-			c := db.Container{Name: cfg.DB.Container, Image: cfg.DB.Image, Volume: cfg.DB.Volume, DSN: base}
-			if ferr := c.Fork(dockerRunner, base.Name, target); ferr != nil {
-				fmt.Fprintln(stderr, "warning: db fork failed:", ferr)
-			}
-		}
-	}
+	ensureServiceDB(cfg, svc, wt, stderr)
 	name := portless.SvcName(svc.Name, wt.Branch, wt.IsPrimary)
 	if existing, ok, _ := reg.Get(name); ok && supervisor.Alive(existing.PID) {
 		fmt.Fprintf(stdout, "%s already running (pid %d)\n", name, existing.PID)
@@ -174,7 +182,7 @@ func startService(cfg *project.Config, svc project.Service, wt *worktree.Info,
 		Key: svc.Key, Open: svc.Open,
 	})
 	fmt.Fprintf(stdout, "%s started (pid %d) -> %s\n", name, pid, logPath)
-	if wantsDB && cfg.DB != nil {
+	if (svc.DB || svc.DBEnv != nil) && cfg.DB != nil {
 		if cfg.DB.SQLite() {
 			fmt.Fprintf(stdout, "  db: %s\n", cfg.DB.Path)
 		} else if base, err := baseDSN(cfg); err == nil {

@@ -22,7 +22,8 @@ COMMANDS:
   stop <name|key>             stop a service (global)
   logs [name|key] [-f] [-t] [--no-color]
                               tail logs, colored per-service prefix; -f to follow
-  db <sub>                    DB: up|down|psql|fork|drop|reset|list|url   ([db] from dx.toml)
+  exec <key> [--] <cmd...>    run a command with <key>'s env (URLs + db_env) and dir
+  db <sub>                    DB: up|down|psql|fork|drop|reset|list|url [--scheme <s>]
   worktree <sub>              worktree: create|rm|list (alias: wt)
   raycast <sub>               Raycast extension: install|uninstall
   update [--force]            self-update to the latest GitHub release
@@ -136,9 +137,27 @@ SUBCOMMANDS:
   drop     drop the branch DB
   reset    drop + re-create (empty schema)
   list     list known DB instances
-  url      print the connection URL
+  url      print the connection URL for this checkout
+             --scheme <s>   override the DSN scheme (e.g. postgresql+psycopg,
+                            sqlite+aiosqlite)
 
 Config: [db] section in dx.toml at repo root.
+`
+
+const execHelp = `dx exec — run a command in a service's environment
+
+USAGE:
+  dx exec <key> [--] <command...>
+
+ARGS:
+  key         service key from dx.toml [service.<key>]
+  command     argv to run (foreground; exit code is propagated)
+
+NOTES:
+  The command gets the same env dx serve would inject (pub/internal URLs,
+  db_env DSN, FORCE_COLOR) and runs in the service's dir. On a linked
+  worktree the idempotent DB fork/seed runs first — so e.g.
+  "dx exec api -- alembic upgrade head" works right after worktree create.
 `
 
 const worktreeHelp = `dx worktree — manage git worktrees
@@ -241,6 +260,8 @@ func helpFor(cmd string) string {
 		return stopHelp
 	case "db":
 		return dbHelp
+	case "exec":
+		return execHelp
 	case "worktree", "wt":
 		return worktreeHelp
 	case "raycast":
@@ -279,6 +300,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runServe(args[1:], stdout, stderr)
 	case "db":
 		return runDB(args[1:], stdout, stderr)
+	case "exec":
+		return runExec(args[1:], stdout, stderr)
 	case "up":
 		return runUp(stdout, stderr)
 	case "down":

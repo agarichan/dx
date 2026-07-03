@@ -26,12 +26,18 @@ func worktreeRoots(porcelain string) []string {
 // runDBSQLite implements `dx db <sub>` for engine = "sqlite".
 // The db is a checkout-relative file: up/down have nothing to manage, fork
 // seeds the worktree's file from the primary, drop/reset operate on the file.
-func runDBSQLite(sub string, cfg *project.Config, wt *worktree.Info, stdout, stderr io.Writer) int {
+// scheme applies to `url` only (e.g. sqlite+aiosqlite).
+func runDBSQLite(sub string, cfg *project.Config, wt *worktree.Info, scheme string, stdout, stderr io.Writer) int {
 	s := db.SQLite{Path: cfg.DB.Path}
 	var err error
 	switch sub {
 	case "url":
-		fmt.Fprintln(stdout, s.URL(wt.Toplevel))
+		v, uerr := dbEnvValue(cfg, wt, scheme, os.Getenv)
+		if uerr != nil {
+			fmt.Fprintln(stderr, uerr)
+			return 1
+		}
+		fmt.Fprintln(stdout, v)
 		return 0
 	case "up", "down":
 		fmt.Fprintf(stdout, "db %s: engine=sqlite — no container to manage\n", sub)

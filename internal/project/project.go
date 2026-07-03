@@ -166,7 +166,7 @@ func Load(path string) (*Config, error) {
 	if c.Worktree.Dir == "" {
 		c.Worktree.Dir = defaultWorktreeDir
 	}
-	if c.DB != nil && c.DB.Image == "" {
+	if c.DB != nil && c.DB.Image == "" && !c.DB.SQLite() {
 		c.DB.Image = defaultImage
 	}
 	// Record each service's map key and default its Name to it.

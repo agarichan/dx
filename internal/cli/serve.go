@@ -75,14 +75,21 @@ func startService(cfg *project.Config, svc project.Service, wt *worktree.Info,
 	reg *registry.Registry, pcli portless.Client, stdout, stderr io.Writer) error {
 	env := buildEnv(os.Environ(), cfg, svc, wt, pcli)
 	if svc.DB && cfg.DB != nil && !wt.IsPrimary {
-		base, err := baseDSN(cfg)
-		if err != nil {
-			return err
-		}
-		target := worktree.DBName(base.Name, wt.Branch, wt.IsPrimary)
-		c := db.Container{Name: cfg.DB.Container, Image: cfg.DB.Image, Volume: cfg.DB.Volume, DSN: base}
-		if ferr := c.Fork(dockerRunner, base.Name, target); ferr != nil {
-			fmt.Fprintln(stderr, "warning: db fork failed:", ferr)
+		if cfg.DB.SQLite() {
+			s := db.SQLite{Path: cfg.DB.Path}
+			if ferr := s.Seed(dockerRunner, wt.PrimaryRoot, wt.Toplevel); ferr != nil {
+				fmt.Fprintln(stderr, "warning: db seed failed:", ferr)
+			}
+		} else {
+			base, err := baseDSN(cfg)
+			if err != nil {
+				return err
+			}
+			target := worktree.DBName(base.Name, wt.Branch, wt.IsPrimary)
+			c := db.Container{Name: cfg.DB.Container, Image: cfg.DB.Image, Volume: cfg.DB.Volume, DSN: base}
+			if ferr := c.Fork(dockerRunner, base.Name, target); ferr != nil {
+				fmt.Fprintln(stderr, "warning: db fork failed:", ferr)
+			}
 		}
 	}
 	name := portless.SvcName(svc.Name, wt.Branch, wt.IsPrimary)
@@ -116,7 +123,9 @@ func startService(cfg *project.Config, svc project.Service, wt *worktree.Info,
 	})
 	fmt.Fprintf(stdout, "%s started (pid %d) -> %s\n", name, pid, logPath)
 	if svc.DB && cfg.DB != nil {
-		if base, err := baseDSN(cfg); err == nil {
+		if cfg.DB.SQLite() {
+			fmt.Fprintf(stdout, "  db: %s\n", cfg.DB.Path)
+		} else if base, err := baseDSN(cfg); err == nil {
 			target := worktree.DBName(base.Name, wt.Branch, wt.IsPrimary)
 			fmt.Fprintf(stdout, "  db: %s\n", target)
 		}

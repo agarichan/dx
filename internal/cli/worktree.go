@@ -66,7 +66,14 @@ func createWorktree(o createOpts, d wtDeps) int {
 		return 1
 	}
 	// DB fork (prepared). Only when [db] declared.
-	if d.Cfg.DB != nil {
+	if d.Cfg.DB.SQLite() {
+		s := db.SQLite{Path: d.Cfg.DB.Path}
+		if err := s.Seed(d.Docker, d.PrimaryRoot, path); err != nil {
+			fmt.Fprintln(d.Stderr, "worktree created but db seed failed:", err)
+			return 3
+		}
+		fmt.Fprintf(d.Stdout, "created %s (branch=%s db=%s)\n", path, o.Branch, d.Cfg.DB.Path)
+	} else if d.Cfg.DB != nil {
 		raw := d.Cfg.DB.Dsn
 		if raw == "" {
 			raw = d.Getenv(d.Cfg.DB.URLEnv)
@@ -200,7 +207,11 @@ func listRows(cfg *project.Config, baseDB, porc string, serviceState func(svcNam
 	rows := parseWorktreePorcelain(porc)
 	for i := range rows {
 		r := &rows[i]
-		r.DB = worktree.DBName(baseDB, r.Branch, r.IsPrimary)
+		if cfg.DB.SQLite() {
+			r.DB = cfg.DB.Path // same relative file in every checkout
+		} else {
+			r.DB = worktree.DBName(baseDB, r.Branch, r.IsPrimary)
+		}
 		for _, k := range cfg.ServiceKeys() {
 			s := cfg.Services[k]
 			name := portless.SvcName(s.Name, r.Branch, r.IsPrimary)
@@ -227,7 +238,8 @@ func rmWorktree(o rmOpts, d rmDeps) int {
 		dropContainer db.Container
 		dropTarget    string
 	)
-	if !o.KeepDB && d.Cfg.DB != nil {
+	// sqlite: the db file lives inside the worktree and is removed with it.
+	if !o.KeepDB && d.Cfg.DB != nil && !d.Cfg.DB.SQLite() {
 		raw := d.Cfg.DB.Dsn
 		if raw == "" {
 			raw = d.Getenv(d.Cfg.DB.URLEnv)

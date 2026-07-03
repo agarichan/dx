@@ -143,7 +143,9 @@ Services are declared as `[service.<key>]` map entries. The key is used:
 | `worktree.init[].command` | string array | required | argv. Shell is not involved. |
 | `worktree.init[].dir` | string | optional (default: worktree root) | Working dir relative to the new worktree root. Must be relative and stay inside the worktree (no absolute paths, no `..`). |
 | `db` | table | optional | Omit if no managed DB |
-| `db.container` | string | required if `[db]` present | Docker container name |
+| `db.engine` | string | optional (default `postgres`) | `postgres` or `sqlite`. SQLite needs no Docker: the DB is a checkout-relative file, `fork` seeds a new worktree's file from the primary (`sqlite3 .backup`), `up`/`down` are no-ops, `psql` opens a `sqlite3` shell, and `url` prints `sqlite:///<abs path>` for the current checkout. |
+| `db.path` | string | required if `engine = "sqlite"` | DB file path relative to the checkout root (e.g. `dev.db`). Postgres-only fields (`container`/`dsn`/`url_env`/`image`/`volume`) must be unset. |
+| `db.container` | string | required for postgres | Docker container name |
 | `db.dsn` | string | `dsn` or `url_env` required | Inline base DSN. Preferred when using `dx db url` with the mise `{{ exec }}` pattern to avoid recursive env evaluation. |
 | `db.url_env` | string | `dsn` or `url_env` required | Env var name holding the base DSN. Used as fallback when `dsn` is empty. |
 | `db.image` | string | optional (default `postgres:18`) | Image for `dx db up` |
@@ -233,6 +235,8 @@ Manage the Postgres container and per-worktree databases. Configuration comes fr
 | `url` | Print the per-checkout DSN (worktree-aware) to stdout |
 
 `fork` and `reset` are rejected on a primary checkout — run them from a linked worktree.
+
+**SQLite engine** — with `engine = "sqlite"` the same subcommands operate on the checkout-relative file instead of a container: `fork` copies the primary's file into the worktree (consistent snapshot via `sqlite3 .backup`, idempotent), `drop`/`reset` remove/re-seed it, `list` shows the file per worktree, and `up`/`down` do nothing. `dx worktree rm` needs no DB drop (the file lives inside the worktree). Apps that read the DSN from an env var work with the same `{{ exec(command='dx db url') }}` pattern — `dx db url` prints `sqlite:///<abs path>` for the current checkout. Requires `sqlite3` on `$PATH` (preinstalled on macOS).
 
 #### `dx db url` — per-checkout DSN
 

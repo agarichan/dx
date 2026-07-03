@@ -70,6 +70,9 @@ func runDB(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	if cfg.DB.SQLite() {
+		return runDBSQLite(sub, cfg, wt, stdout, stderr)
+	}
 	c, baseName, err := containerFor(cfg)
 	if err != nil {
 		fmt.Fprintln(stderr, err)

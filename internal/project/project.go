@@ -1,0 +1,145 @@
+// Package project loads dx.toml, the single source of project configuration
+// for worktree / serve / db / up commands.
+package project
+
+import (
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/BurntSushi/toml"
+)
+
+type Worktree struct {
+	Dir  string     `toml:"dir"`
+	Copy []CopyStep `toml:"copy"`
+	Init []InitStep `toml:"init"`
+}
+
+// InitStep is one command run after `dx worktree create` succeeds.
+type InitStep struct {
+	Command []string `toml:"command"`
+	Dir     string   `toml:"dir"` // relative to the new worktree root; empty = root
+}
+
+// CopyStep seeds a file or directory from the primary worktree into the new
+// worktree at the same relative path. Missing sources and existing destinations
+// are silently skipped.
+type CopyStep struct {
+	From string `toml:"from"` // relative to the primary root; also the destination in the new worktree
+}
+
+type DB struct {
+	Container string `toml:"container"`
+	Dsn       string `toml:"dsn"`
+	URLEnv    string `toml:"url_env"`
+	Image     string `toml:"image"`
+	Volume    string `toml:"volume"`
+}
+
+type Service struct {
+	Name     string            `toml:"name"`
+	Command  []string          `toml:"command"`
+	DB       bool              `toml:"db"`
+	Dir      string            `toml:"dir"`
+	Pub      map[string]string `toml:"pub"`
+	Internal map[string]string `toml:"internal"`
+}
+
+type Config struct {
+	Worktree Worktree           `toml:"worktree"`
+	DB       *DB                `toml:"db"`
+	Services map[string]Service `toml:"service"`
+	Root     string             `toml:"-"` // directory containing dx.toml
+}
+
+const (
+	defaultWorktreeDir = ".claude/worktrees"
+	defaultImage       = "postgres:18"
+)
+
+// Validate checks required fields after Load.
+func (c *Config) Validate() error {
+	if c.DB != nil {
+		if c.DB.Container == "" {
+			return fmt.Errorf("[db].container is required when [db] is present")
+		}
+		if c.DB.Dsn == "" && c.DB.URLEnv == "" {
+			return fmt.Errorf("[db]: set dsn or url_env")
+		}
+	}
+	for i, step := range c.Worktree.Init {
+		if len(step.Command) == 0 {
+			return fmt.Errorf("worktree.init[%d]: command is required", i)
+		}
+		if cleaned := filepath.Clean(step.Dir); filepath.IsAbs(cleaned) || cleaned == ".." ||
+			strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("worktree.init[%d]: dir %q must be relative and stay inside the worktree", i, step.Dir)
+		}
+	}
+	for i, step := range c.Worktree.Copy {
+		if step.From == "" {
+			return fmt.Errorf("worktree.copy[%d]: from is required", i)
+		}
+		cleaned := filepath.Clean(step.From)
+		if filepath.IsAbs(cleaned) || cleaned == ".." ||
+			strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("worktree.copy[%d]: from %q must be relative and stay inside the worktree", i, step.From)
+		}
+	}
+	for key, s := range c.Services {
+		if len(s.Command) == 0 {
+			return fmt.Errorf("service %q: command is required", key)
+		}
+		if s.DB && c.DB == nil {
+			return fmt.Errorf("service %q: db=true but no [db] table", key)
+		}
+	}
+	return nil
+}
+
+// Service returns the service with the given key.
+func (c *Config) Service(key string) (Service, bool) {
+	s, ok := c.Services[key]
+	return s, ok
+}
+
+// ServiceKeys returns the service keys in deterministic (sorted) order.
+func (c *Config) ServiceKeys() []string {
+	keys := make([]string, 0, len(c.Services))
+	for k := range c.Services {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// Load reads and decodes dx.toml at path, applies defaults, and records Root.
+func Load(path string) (*Config, error) {
+	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("dx.toml not found at %s", filepath.Dir(path))
+	}
+	var c Config
+	if _, err := toml.DecodeFile(path, &c); err != nil {
+		return nil, fmt.Errorf("dx.toml: %w", err)
+	}
+	if c.Worktree.Dir == "" {
+		c.Worktree.Dir = defaultWorktreeDir
+	}
+	if c.DB != nil && c.DB.Image == "" {
+		c.DB.Image = defaultImage
+	}
+	// Default each service's Name to its map key.
+	for k, s := range c.Services {
+		if s.Name == "" {
+			s.Name = k
+			c.Services[k] = s
+		}
+	}
+	c.Root = filepath.Dir(path)
+	return &c, nil
+}

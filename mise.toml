@@ -1,0 +1,57 @@
+# dx 開発環境（go ツールチェーン固定 + ビルド/テスト/lint タスク）。
+# go は他リポの mise から借りず、このリポで明示的に固定する。
+[tools]
+go = "1.23"
+node = "24"   # Raycast extension (raycast/) 用
+
+[tasks.build]
+description = "dx バイナリをビルド (cli/dx → ./dx)"
+sources = ["**/*.go", "go.mod"]
+outputs = ["dx"]
+run = "go build -o dx ./cmd/dx"
+
+[tasks.test]
+description = "unit テスト（fast。docker 必須の integration は除外）"
+run = "go test ./... -short"
+
+[tasks."test:integration"]
+description = "integration テスト（実 docker/postgres 必須。-short を外して実行）"
+run = "go test ./internal/db/ -run Integration -v"
+
+[tasks.fmt]
+description = "gofmt で整形（in-place）"
+run = "gofmt -w ."
+
+[tasks.vet]
+description = "go vet"
+run = "go vet ./..."
+
+[tasks.lint]
+description = "fmt → vet を順に実行"
+run = [{ task = "fmt" }, { task = "vet" }]
+
+[tasks.check]
+description = "lint + test をまとめて実行（コミット前の確認）"
+run = [{ tasks = ["lint", "test"] }]
+
+[tasks.install]
+description = "ビルドして ~/.local/bin/dx へ配置"
+depends = ["build"]
+run = "install -m 0755 dx \"$HOME/.local/bin/dx\""
+
+# --- Raycast extension (raycast/) ---
+
+[tasks."raycast:install"]
+description = "Raycast に取り込む（依存→ビルド→自動終了。Ctrl+C 不要・初回1回でOK）"
+dir = "raycast"
+run = ["npm install", "node scripts/import.mjs"]
+
+[tasks."raycast:dev"]
+description = "拡張のコード編集時のライブ更新（ray develop 常駐。Ctrl+C で停止）"
+dir = "raycast"
+run = ["npm install", "npm run dev"]
+
+[tasks."raycast:icon"]
+description = "assets/icon.svg から拡張アイコン(extension-icon.png)を再生成（resvg）"
+dir = "raycast"
+run = "node scripts/gen-icon.mjs"

@@ -1,0 +1,14 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4f46e5"/>
+      <stop offset="0.55" stop-color="#7c3aed"/>
+      <stop offset="1" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+  <!-- full-bleed の角丸スクエア。透明は四隅の角だけ（=角丸そのもの）。白マージン帯は無し。 -->
+  <rect x="0" y="0" width="512" height="512" rx="115" ry="115" fill="url(#bg)"/>
+  <polyline points="170,168 302,256 170,344" fill="none" stroke="#ffffff"
+            stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="300" y="316" width="122" height="42" rx="21" fill="#ffffff"/>
+</svg>

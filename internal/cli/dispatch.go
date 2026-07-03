@@ -5,7 +5,9 @@ import (
 	"io"
 )
 
-const version = "0.1.0"
+// version is stamped by release builds via
+// -ldflags "-X github.com/agarichan/dx/internal/cli.version=<tag>".
+var version = "dev"
 
 const helpText = `dx — per-worktree dev environment CLI
 
@@ -23,6 +25,7 @@ COMMANDS:
   db <sub>                    DB: up|down|psql|fork|drop|reset|list|url   ([db] from dx.toml)
   worktree <sub>              worktree: create|rm|list
   raycast <sub>               Raycast extension: install|uninstall
+  update [--force]            self-update to the latest GitHub release
   version                     print version
   -h, --help                  show this help
 
@@ -207,6 +210,19 @@ USAGE:
   dx version
 `
 
+const updateHelp = `dx update — self-update to the latest GitHub release
+
+USAGE:
+  dx update [--force]
+
+FLAGS:
+  --force, -f    also overwrite non-release ("dev") builds
+
+NOTES:
+  Downloads dx-<os>-<arch> from the latest release, verifies it against the
+  release's SHA256SUMS, and atomically replaces the running binary.
+`
+
 // helpFor returns command-specific help text, falling back to the overview helpText
 // for unknown commands.
 func helpFor(cmd string) string {
@@ -229,6 +245,8 @@ func helpFor(cmd string) string {
 		return worktreeHelp
 	case "raycast":
 		return raycastHelp
+	case "update":
+		return updateHelp
 	case "version":
 		return versionHelp
 	default:
@@ -275,6 +293,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runWorktree(args[1:], stdout, stderr)
 	case "raycast":
 		return runRaycast(args[1:], stdout, stderr)
+	case "update":
+		return runUpdate(args[1:], stdout, stderr)
 	case "__logpump": // internal: log fan-out pump (not in usage)
 		return runLogPump(args[1:])
 	default:

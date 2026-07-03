@@ -19,6 +19,18 @@ A developer-experience CLI that wraps [portless](https://portless.dev) and Docke
 ## Install
 
 ```
+curl -fsSL https://raw.githubusercontent.com/agarichan/dx/main/install.sh | sh
+```
+
+Downloads the latest release binary (darwin/linux, arm64/amd64, checksum-verified) to `~/.local/bin/dx` (override with `DX_INSTALL_DIR`). Update later with:
+
+```
+dx update
+```
+
+Or with Go:
+
+```
 go install github.com/agarichan/dx/cmd/dx@latest
 ```
 
@@ -300,6 +312,10 @@ Show all git worktrees with their DB status and service states side by side.
 ### `dx raycast <install|uninstall>`
 
 Install or remove the bundled Raycast extension. See [Raycast Extension](#raycast-extension-optional).
+
+### `dx update`
+
+Self-update to the latest GitHub release: downloads `dx-<os>-<arch>`, verifies it against the release's `SHA256SUMS`, and atomically replaces the running binary. Non-release builds (`dx version` = `dev`, i.e. built via `go install` or from source) refuse unless `--force` is given.
 
 ### `dx version`
 

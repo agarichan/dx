@@ -5,9 +5,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/agarichan/dx/internal/config"
 	"github.com/agarichan/dx/internal/db"
+	"github.com/agarichan/dx/internal/dburl"
 	"github.com/agarichan/dx/internal/portless"
 	"github.com/agarichan/dx/internal/project"
 	"github.com/agarichan/dx/internal/registry"
@@ -31,12 +33,41 @@ func loadConfig() (*project.Config, *worktree.Info, error) {
 	return cfg, wt, nil
 }
 
+// dbEnvValue computes the per-checkout DSN for db_env injection.
+// scheme overrides the DSN scheme when non-empty. lookup resolves [db].url_env
+// from the parent env (keeps this pure — no os.Getenv).
+func dbEnvValue(cfg *project.Config, wt *worktree.Info, scheme string, lookup func(string) string) (string, error) {
+	if cfg.DB.SQLite() {
+		s := db.SQLite{Path: cfg.DB.Path}
+		if scheme == "" {
+			scheme = "sqlite"
+		}
+		return scheme + ":///" + s.File(wt.Toplevel), nil
+	}
+	raw := cfg.DB.Dsn
+	if raw == "" {
+		raw = lookup(cfg.DB.URLEnv)
+	}
+	if raw == "" {
+		return "", fmt.Errorf("[db]: set dsn or env var %q", cfg.DB.URLEnv)
+	}
+	d, err := dburl.Parse(raw)
+	if err != nil {
+		return "", err
+	}
+	d = d.WithName(worktree.DBName(d.Name, wt.Branch, wt.IsPrimary))
+	if scheme != "" {
+		d = d.WithScheme(scheme)
+	}
+	return d.String(), nil
+}
+
 // buildEnv computes the child env with injected URL vars.
 // References in svc.Pub/Internal are resolved as config keys first; if no key
 // matches, the value is used as a literal portless base name.
 // "self" always resolves to the current service's Name.
 // It is a pure function: no git/docker/process side effects.
-func buildEnv(parent []string, cfg *project.Config, svc project.Service, wt *worktree.Info, cli portless.Client) []string {
+func buildEnv(parent []string, cfg *project.Config, svc project.Service, wt *worktree.Info, cli portless.Client) ([]string, error) {
 	env := append([]string{}, parent...)
 	set := func(k, v string) {
 		env = append(env, k+"="+v)
@@ -60,7 +91,22 @@ func buildEnv(parent []string, cfg *project.Config, svc project.Service, wt *wor
 	for k, ref := range svc.Internal {
 		set(k, cli.URLInternal(resolve(ref)))
 	}
-	return env
+	if svc.DBEnv != nil {
+		lookup := func(k string) string {
+			for _, kv := range parent {
+				if strings.HasPrefix(kv, k+"=") {
+					return kv[len(k)+1:]
+				}
+			}
+			return ""
+		}
+		v, err := dbEnvValue(cfg, wt, svc.DBEnv.Scheme, lookup)
+		if err != nil {
+			return nil, fmt.Errorf("service %q db_env: %w", svc.Key, err)
+		}
+		set(svc.DBEnv.Name, v)
+	}
+	return env, nil
 }
 
 // serviceDir returns the working directory for svc: <repo root>/<svc.Dir>.
@@ -73,8 +119,12 @@ func serviceDir(cfg *project.Config, svc project.Service) string {
 // Idempotent: no-op if the portless name is already alive.
 func startService(cfg *project.Config, svc project.Service, wt *worktree.Info,
 	reg *registry.Registry, pcli portless.Client, stdout, stderr io.Writer) error {
-	env := buildEnv(os.Environ(), cfg, svc, wt, pcli)
-	if svc.DB && cfg.DB != nil && !wt.IsPrimary {
+	env, err := buildEnv(os.Environ(), cfg, svc, wt, pcli)
+	if err != nil {
+		return err
+	}
+	wantsDB := svc.DB || svc.DBEnv != nil
+	if wantsDB && cfg.DB != nil && !wt.IsPrimary {
 		if cfg.DB.SQLite() {
 			s := db.SQLite{Path: cfg.DB.Path}
 			if ferr := s.Seed(dockerRunner, wt.PrimaryRoot, wt.Toplevel); ferr != nil {
@@ -112,7 +162,9 @@ func startService(cfg *project.Config, svc project.Service, wt *worktree.Info,
 		return err
 	}
 	dbURLEnv := ""
-	if svc.DB && cfg.DB != nil {
+	if svc.DBEnv != nil {
+		dbURLEnv = svc.DBEnv.Name
+	} else if svc.DB && cfg.DB != nil {
 		dbURLEnv = cfg.DB.URLEnv
 	}
 	_ = reg.Put(registry.Service{
@@ -122,7 +174,7 @@ func startService(cfg *project.Config, svc project.Service, wt *worktree.Info,
 		Key: svc.Key, Open: svc.Open,
 	})
 	fmt.Fprintf(stdout, "%s started (pid %d) -> %s\n", name, pid, logPath)
-	if svc.DB && cfg.DB != nil {
+	if wantsDB && cfg.DB != nil {
 		if cfg.DB.SQLite() {
 			fmt.Fprintf(stdout, "  db: %s\n", cfg.DB.Path)
 		} else if base, err := baseDSN(cfg); err == nil {

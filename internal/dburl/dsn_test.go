@@ -46,3 +46,19 @@ func TestParse_NoDriverNoQuery(t *testing.T) {
 		t.Fatalf("String() = %q", d.String())
 	}
 }
+
+func TestWithScheme(t *testing.T) {
+	d, _ := Parse("postgres://u:p@h:5432/app")
+	got := d.WithScheme("postgresql+psycopg").String()
+	if got != "postgresql+psycopg://u:p@h:5432/app" {
+		t.Fatalf("with driver = %q", got)
+	}
+	got = d.WithScheme("mysql").String()
+	if got != "mysql://u:p@h:5432/app" {
+		t.Fatalf("plain = %q", got)
+	}
+	// original untouched
+	if d.String() != "postgres://u:p@h:5432/app" {
+		t.Fatalf("original mutated: %q", d.String())
+	}
+}

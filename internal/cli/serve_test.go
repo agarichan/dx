@@ -15,7 +15,10 @@ func TestBuildEnv_ForcesColor(t *testing.T) {
 	wt := &worktree.Info{Toplevel: "/x", Branch: "main", IsPrimary: true}
 	cfg := &project.Config{Services: map[string]project.Service{}}
 	svc := project.Service{Name: "svc"}
-	env := buildEnv([]string{}, cfg, svc, wt, cli)
+	env, err := buildEnv([]string{}, cfg, svc, wt, cli)
+	if err != nil {
+		t.Fatal(err)
+	}
 	m := envMap(env)
 	if m["FORCE_COLOR"] != "1" {
 		t.Fatalf("FORCE_COLOR not set: env=%v", env)
@@ -46,7 +49,10 @@ func TestBuildEnv_InjectsURLs(t *testing.T) {
 		Pub:      map[string]string{"APP_API_URL": "self", "APP_WEBAPP_URL": "web"},
 		Internal: map[string]string{"VITE_API_URL": "api"},
 	}
-	env := buildEnv(parent, cfg, svc, wt, cli)
+	env, err := buildEnv(parent, cfg, svc, wt, cli)
+	if err != nil {
+		t.Fatal(err)
+	}
 	m := envMap(env)
 	// "self" → svc.Name = "myapp-api" → portless name "myapp-api-ws-cat"
 	if m["APP_API_URL"] != "https://myapp-api-ws-cat.dev.example.com" {

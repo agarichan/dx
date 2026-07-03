@@ -41,6 +41,17 @@ func Parse(raw string) (*DSN, error) {
 	}, nil
 }
 
+// WithScheme returns a copy with Scheme (and Driver, when s contains
+// "scheme+driver") replaced.
+func (d *DSN) WithScheme(s string) *DSN {
+	c := *d
+	c.Scheme, c.Driver = s, ""
+	if i := strings.IndexByte(s, '+'); i >= 0 {
+		c.Scheme, c.Driver = s[:i], s[i+1:]
+	}
+	return &c
+}
+
 // WithName returns a copy with Name replaced.
 func (d *DSN) WithName(name string) *DSN {
 	c := *d

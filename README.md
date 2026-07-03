@@ -166,6 +166,7 @@ Services are declared as `[service.<key>]` map entries. The key is used:
 | `service.<key>.name` | string | optional (defaults to `<key>`) | Portless registration base name (e.g. `myapp-api`). Primary uses this name; linked worktrees get `<name>-<branch>`. Omit to use the key itself. |
 | `service.<key>.command` | string array | required | argv. `{port}` is replaced with the port allocated by dx. Shell is not involved. |
 | `service.<key>.db` | bool | optional | If true, perform an idempotent DB fork for the worktree (no-op on primary). The child process inherits the DB env as set by mise — `dx serve` does not rewrite it. Requires `[db]`. |
+| `service.<key>.db_env` | table | optional | `{ name = "APP_DATABASE_URL", scheme = "postgresql+psycopg" }`. `dx serve` injects the per-checkout DSN (same derivation as `dx db url`) into the child env as `name`; `scheme` optionally overrides the DSN scheme (e.g. `sqlite+aiosqlite`). Implies the fork/seed behavior of `db = true`. Requires `[db]`. Prefer this over the mise `{{ exec }}` pattern — it also works when dx itself is a mise-managed tool. |
 | `service.<key>.dir` | string | optional (default: repo root) | Working directory for the service process, relative to the repo root. Omit to use the repo root. |
 | `service.<key>.pub` | table | optional | `ENV = ref`. Injects the public URL of `ref` as `ENV`. `ref` is another service's key, `"self"` for the current service, or a literal portless base name as fallback. |
 | `service.<key>.internal` | table | optional | Same as `pub` but injects the internal URL. |
@@ -261,13 +262,23 @@ postgres://myapp:pw@localhost:5432/myapp_feat_x
 
 The DB name is derived from the current worktree branch. On the primary checkout it returns the base DSN unchanged.
 
-**mise `{{ exec }}` pattern** — wire `dx db url` into `mise.toml` so every mise task automatically uses the correct worktree DB:
+**Injecting the DSN into services** — declare `db_env` on the service; `dx serve` sets the env var to the per-checkout DSN:
+
+```toml
+[service.api]
+command = ["uvicorn", "app:app", "--port", "{port}"]
+db_env  = { name = "APP_DATABASE_URL", scheme = "postgresql+psycopg" }
+```
+
+**mise `{{ exec }}` pattern** — for mise *tasks* (migrations etc.), `dx db url` can be wired into `mise.toml`:
 
 ```toml
 # mise.toml
 [env]
 DATABASE_URL = "{{ exec(command='dx db url') }}"
 ```
+
+> **Warning**: the `[env]` + `{{ exec }}` pattern does NOT work when dx itself is installed as a mise tool (`github:agarichan/dx` in `[tools]`) — mise evaluates `[env]` before tool paths are resolved, so `dx` is not found. In that setup use `db_env` for services, and call `dx db url` inside the task itself (e.g. `DATABASE_URL=$(dx db url) alembic upgrade head`).
 
 **Recursion avoidance**: if `url_env` in `dx.toml` references the same env var that the `{{ exec }}` pattern sets, recursive evaluation will occur. Avoid this by using the inline `dsn` field in `dx.toml` instead of `url_env`. With `dsn`, dx reads the DSN directly from the config file and never touches the env during `dx db url`.
 

@@ -46,10 +46,19 @@ type DB struct {
 // SQLite reports whether the managed DB is the sqlite engine.
 func (d *DB) SQLite() bool { return d != nil && d.Engine == "sqlite" }
 
+// DBEnv makes dx serve inject the per-checkout DSN into the service's env —
+// unlike mise [env] + exec(dx db url), this works when dx itself is a
+// mise-managed tool (whose PATH is not yet resolved at env-eval time).
+type DBEnv struct {
+	Name   string `toml:"name"`   // env var to set (required)
+	Scheme string `toml:"scheme"` // optional DSN scheme override (e.g. postgresql+psycopg)
+}
+
 type Service struct {
 	Name     string            `toml:"name"`
 	Command  []string          `toml:"command"`
 	DB       bool              `toml:"db"`
+	DBEnv    *DBEnv            `toml:"db_env"` // implies db=true (fork/seed)
 	Dir      string            `toml:"dir"`
 	Pub      map[string]string `toml:"pub"`
 	Internal map[string]string `toml:"internal"`
@@ -127,6 +136,14 @@ func (c *Config) Validate() error {
 		}
 		if s.DB && c.DB == nil {
 			return fmt.Errorf("service %q: db=true but no [db] table", key)
+		}
+		if s.DBEnv != nil {
+			if s.DBEnv.Name == "" {
+				return fmt.Errorf("service %q: db_env.name is required", key)
+			}
+			if c.DB == nil {
+				return fmt.Errorf("service %q: db_env requires a [db] table", key)
+			}
 		}
 		if s.Open {
 			if openKey != "" {

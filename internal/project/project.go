@@ -34,12 +34,17 @@ type CopyStep struct {
 }
 
 type DB struct {
+	Engine    string `toml:"engine"` // "" | "postgres" | "sqlite" ("" = postgres)
 	Container string `toml:"container"`
 	Dsn       string `toml:"dsn"`
 	URLEnv    string `toml:"url_env"`
 	Image     string `toml:"image"`
 	Volume    string `toml:"volume"`
+	Path      string `toml:"path"` // sqlite only: db file relative to the checkout root
 }
+
+// SQLite reports whether the managed DB is the sqlite engine.
+func (d *DB) SQLite() bool { return d != nil && d.Engine == "sqlite" }
 
 type Service struct {
 	Name     string            `toml:"name"`
@@ -67,11 +72,33 @@ const (
 // Validate checks required fields after Load.
 func (c *Config) Validate() error {
 	if c.DB != nil {
-		if c.DB.Container == "" {
-			return fmt.Errorf("[db].container is required when [db] is present")
-		}
-		if c.DB.Dsn == "" && c.DB.URLEnv == "" {
-			return fmt.Errorf("[db]: set dsn or url_env")
+		switch c.DB.Engine {
+		case "", "postgres":
+			if c.DB.Path != "" {
+				return fmt.Errorf("[db].path is sqlite-only (engine = %q)", c.DB.Engine)
+			}
+			if c.DB.Container == "" {
+				return fmt.Errorf("[db].container is required when [db] is present")
+			}
+			if c.DB.Dsn == "" && c.DB.URLEnv == "" {
+				return fmt.Errorf("[db]: set dsn or url_env")
+			}
+		case "sqlite":
+			if c.DB.Path == "" {
+				return fmt.Errorf("[db].path is required for engine = \"sqlite\"")
+			}
+			if cleaned := filepath.Clean(c.DB.Path); filepath.IsAbs(cleaned) || cleaned == ".." ||
+				strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+				return fmt.Errorf("[db].path %q must be relative and stay inside the checkout", c.DB.Path)
+			}
+			if c.DB.Container != "" || c.DB.Image != "" || c.DB.Volume != "" {
+				return fmt.Errorf("[db]: container/image/volume are postgres-only (engine = \"sqlite\")")
+			}
+			if c.DB.Dsn != "" || c.DB.URLEnv != "" {
+				return fmt.Errorf("[db]: dsn/url_env are postgres-only (engine = \"sqlite\"; the DSN derives from path)")
+			}
+		default:
+			return fmt.Errorf("[db].engine %q is not supported (use \"postgres\" or \"sqlite\")", c.DB.Engine)
 		}
 	}
 	for i, step := range c.Worktree.Init {

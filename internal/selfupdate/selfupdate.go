@@ -27,6 +27,7 @@ type Options struct {
 	Arch    string // default runtime.GOARCH
 	ExePath string // default os.Executable()
 	Client  *http.Client
+	Getenv  func(string) string // default os.Getenv (MISE_DATA_DIR detection)
 }
 
 func (o *Options) defaults() error {
@@ -52,7 +53,33 @@ func (o *Options) defaults() error {
 		}
 		o.ExePath = exe
 	}
+	if o.Getenv == nil {
+		o.Getenv = os.Getenv
+	}
 	return nil
+}
+
+// miseManaged reports whether exe lives in a mise tool install directory.
+// Self-updating there would fight mise's own version management (the pinned
+// version no longer matches the binary; mise may restore it on install).
+func miseManaged(exe string, getenv func(string) string) bool {
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	sep := string(filepath.Separator)
+	if strings.Contains(exe, sep+"mise"+sep+"installs"+sep) {
+		return true
+	}
+	if data := getenv("MISE_DATA_DIR"); data != "" {
+		data = filepath.Clean(data)
+		if resolved, err := filepath.EvalSymlinks(data); err == nil {
+			data = resolved
+		}
+		if strings.HasPrefix(exe, data+sep+"installs"+sep) {
+			return true
+		}
+	}
+	return false
 }
 
 func (o Options) get(url string) ([]byte, error) {
@@ -102,6 +129,9 @@ func wantSum(sums, asset string) (string, error) {
 func Run(o Options, stdout io.Writer) error {
 	if err := o.defaults(); err != nil {
 		return err
+	}
+	if miseManaged(o.ExePath, o.Getenv) {
+		return fmt.Errorf("this dx is managed by mise — update it with mise instead:\n  mise up %q", "github:"+o.Repo)
 	}
 	tag, err := o.latestTag()
 	if err != nil {

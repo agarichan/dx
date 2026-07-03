@@ -343,7 +343,7 @@ Install or remove the bundled Raycast extension. See [Raycast Extension](#raycas
 
 ### `dx update`
 
-Self-update to the latest GitHub release: downloads `dx-<os>-<arch>`, verifies it against the release's `SHA256SUMS`, and atomically replaces the running binary. Non-release builds (`dx version` = `dev`, i.e. built via `go install` or from source) refuse unless `--force` is given.
+Self-update to the latest GitHub release: downloads `dx-<os>-<arch>`, verifies it against the release's `SHA256SUMS`, and atomically replaces the running binary. Non-release builds (`dx version` = `dev`, i.e. built via `go install` or from source) refuse unless `--force` is given. mise-managed installs always refuse (even with `--force`) — update those with `mise up "github:agarichan/dx"` so mise's pinned version stays truthful.
 
 ### `dx version`
 

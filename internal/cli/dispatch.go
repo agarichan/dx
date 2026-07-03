@@ -240,6 +240,8 @@ FLAGS:
 NOTES:
   Downloads dx-<os>-<arch> from the latest release, verifies it against the
   release's SHA256SUMS, and atomically replaces the running binary.
+  mise-managed installs refuse (even with --force) — use:
+    mise up "github:agarichan/dx"
 `
 
 // helpFor returns command-specific help text, falling back to the overview helpText

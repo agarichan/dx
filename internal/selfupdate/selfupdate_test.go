@@ -136,3 +136,46 @@ func TestRun_ChecksumMismatchLeavesExe(t *testing.T) {
 		t.Fatal("exe must be untouched on checksum failure")
 	}
 }
+
+func TestRun_RefusesMiseManagedInstall(t *testing.T) {
+	srv := fakeRelease(t, "v9.9.9", []byte("new-binary"))
+	dir := filepath.Join(t.TempDir(), "mise", "installs", "github-agarichan-dx", "0.4.0")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	exe := filepath.Join(dir, "dx")
+	os.WriteFile(exe, []byte("old-binary"), 0o755)
+	o := opts(srv, exe, "0.4.0", false)
+	err := Run(o, new(bytes.Buffer))
+	if err == nil || !strings.Contains(err.Error(), "mise") {
+		t.Fatalf("err = %v", err)
+	}
+	// --force does not bypass: mise would fight the replaced binary
+	o.Force = true
+	if err := Run(o, new(bytes.Buffer)); err == nil {
+		t.Fatal("force must not bypass the mise guard")
+	}
+	b, _ := os.ReadFile(exe)
+	if string(b) != "old-binary" {
+		t.Fatal("exe must be untouched")
+	}
+}
+
+func TestRun_MiseDataDirEnvDetected(t *testing.T) {
+	srv := fakeRelease(t, "v9.9.9", []byte("new-binary"))
+	data := t.TempDir() // custom MISE_DATA_DIR without "mise" in the path
+	dir := filepath.Join(data, "installs", "github-agarichan-dx", "0.4.0")
+	os.MkdirAll(dir, 0o755)
+	exe := filepath.Join(dir, "dx")
+	os.WriteFile(exe, []byte("old-binary"), 0o755)
+	o := opts(srv, exe, "0.4.0", false)
+	o.Getenv = func(k string) string {
+		if k == "MISE_DATA_DIR" {
+			return data
+		}
+		return ""
+	}
+	if err := Run(o, new(bytes.Buffer)); err == nil || !strings.Contains(err.Error(), "mise") {
+		t.Fatalf("err = %v", err)
+	}
+}

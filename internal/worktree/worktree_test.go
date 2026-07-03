@@ -74,6 +74,9 @@ func TestDetect_LinkedWorktree(t *testing.T) {
 	if info.Branch != "ws-category" {
 		t.Fatalf("branch = %q", info.Branch)
 	}
+	if info.PrimaryRoot != "/home/u/work/myapp" {
+		t.Fatalf("primary root = %q", info.PrimaryRoot)
+	}
 }
 
 func TestDetect_PrimaryFromSubdir(t *testing.T) {
@@ -99,6 +102,9 @@ func TestDetect_PrimaryFromSubdir(t *testing.T) {
 	}
 	if info.Branch != "main" {
 		t.Fatalf("branch = %q", info.Branch)
+	}
+	if info.PrimaryRoot != "/home/u/work/myapp" {
+		t.Fatalf("primary root = %q", info.PrimaryRoot)
 	}
 }
 

@@ -4,13 +4,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
 type Info struct {
-	Toplevel  string
-	Branch    string
-	IsPrimary bool
+	Toplevel    string
+	Branch      string
+	IsPrimary   bool
+	PrimaryRoot string // primary checkout root (== Toplevel on the primary)
 }
 
 // Slug normalizes a branch name into a postgres-identifier-safe token.
@@ -95,8 +97,9 @@ func Detect(dir string, run func(args ...string) (string, error)) (*Info, error)
 		branch = "wt"
 	}
 	return &Info{
-		Toplevel:  strings.TrimSpace(top),
-		Branch:    strings.TrimSpace(branch),
-		IsPrimary: gd == gc,
+		Toplevel:    strings.TrimSpace(top),
+		Branch:      strings.TrimSpace(branch),
+		IsPrimary:   gd == gc,
+		PrimaryRoot: filepath.Dir(gc), // <primary>/.git → <primary>
 	}, nil
 }

@@ -48,6 +48,8 @@ type Service struct {
 	Dir      string            `toml:"dir"`
 	Pub      map[string]string `toml:"pub"`
 	Internal map[string]string `toml:"internal"`
+	Open     bool              `toml:"open"` // this service's URL is the one UIs open (max 1 per config)
+	Key      string            `toml:"-"`    // map key, populated by Load
 }
 
 type Config struct {
@@ -91,12 +93,19 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("worktree.copy[%d]: from %q must be relative and stay inside the worktree", i, step.From)
 		}
 	}
+	openKey := ""
 	for key, s := range c.Services {
 		if len(s.Command) == 0 {
 			return fmt.Errorf("service %q: command is required", key)
 		}
 		if s.DB && c.DB == nil {
 			return fmt.Errorf("service %q: db=true but no [db] table", key)
+		}
+		if s.Open {
+			if openKey != "" {
+				return fmt.Errorf("services %q and %q both set open=true (max 1)", openKey, key)
+			}
+			openKey = key
 		}
 	}
 	return nil
@@ -133,12 +142,13 @@ func Load(path string) (*Config, error) {
 	if c.DB != nil && c.DB.Image == "" {
 		c.DB.Image = defaultImage
 	}
-	// Default each service's Name to its map key.
+	// Record each service's map key and default its Name to it.
 	for k, s := range c.Services {
+		s.Key = k
 		if s.Name == "" {
 			s.Name = k
-			c.Services[k] = s
 		}
+		c.Services[k] = s
 	}
 	c.Root = filepath.Dir(path)
 	return &c, nil

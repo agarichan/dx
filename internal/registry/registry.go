@@ -21,6 +21,8 @@ type Service struct {
 	Pub      map[string]string `json:"pub,omitempty"`
 	Internal map[string]string `json:"internal,omitempty"`
 	DB       string            `json:"db,omitempty"`
+	Key      string            `json:"key,omitempty"`  // dx.toml service map key
+	Open     bool              `json:"open,omitempty"` // this service's URL is the one UIs open
 }
 
 type Registry struct {

@@ -231,7 +231,7 @@ func TestRunStatus_AllJSON(t *testing.T) {
 	// 2 つの checkout に登録（PID は実在の自分を使い running 判定させる）
 	rega, _ := registry.Open(registry.StateRoot(os.Getenv), "/home/u/work/myapp")
 	regb, _ := registry.Open(registry.StateRoot(os.Getenv), "/home/u/work/myapp/.claude/worktrees/x")
-	rega.Put(registry.Service{Name: "myapp-api", PID: os.Getpid(), Root: "/home/u/work/myapp", URL: "https://myapp-api.dev.example.com", LogPath: "/tmp/a.log"})
+	rega.Put(registry.Service{Name: "myapp-api", PID: os.Getpid(), Root: "/home/u/work/myapp", URL: "https://myapp-api.dev.example.com", LogPath: "/tmp/a.log", Key: "api", Open: true})
 	regb.Put(registry.Service{Name: "myapp-x", PID: 999999, Root: "/home/u/work/myapp/.claude/worktrees/x", URL: "https://myapp-x.dev.example.com", LogPath: "/tmp/b.log"})
 
 	var out, errb bytes.Buffer
@@ -258,6 +258,14 @@ func TestRunStatus_AllJSON(t *testing.T) {
 	}
 	if byName["myapp-api"]["url"] != "https://myapp-api.dev.example.com" {
 		t.Fatalf("url=%v", byName["myapp-api"]["url"])
+	}
+	// key/open flow from the registry record into the JSON
+	if byName["myapp-api"]["key"] != "api" || byName["myapp-api"]["open"] != true {
+		t.Fatalf("key/open = %v/%v", byName["myapp-api"]["key"], byName["myapp-api"]["open"])
+	}
+	// records that predate the fields yield zero values
+	if byName["myapp-x"]["key"] != "" || byName["myapp-x"]["open"] != false {
+		t.Fatalf("legacy key/open = %v/%v", byName["myapp-x"]["key"], byName["myapp-x"]["open"])
 	}
 }
 

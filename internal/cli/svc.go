@@ -161,6 +161,8 @@ type statusEntry struct {
 	PID   int    `json:"pid"`
 	URL   string `json:"url"`
 	Log   string `json:"log"`
+	Key   string `json:"key"`
+	Open  bool   `json:"open"`
 }
 
 func runStatus(args []string, stdout, stderr io.Writer) int {
@@ -207,6 +209,7 @@ func runStatus(args []string, stdout, stderr io.Writer) int {
 		entries = append(entries, statusEntry{
 			Name: l.Service.Name, Root: l.Service.Root, State: state,
 			PID: l.Service.PID, URL: l.Service.URL, Log: l.Service.LogPath,
+			Key: l.Service.Key, Open: l.Service.Open,
 		})
 	}
 

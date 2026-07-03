@@ -112,6 +112,7 @@ func startService(cfg *project.Config, svc project.Service, wt *worktree.Info,
 		Name: name, PID: pid, LogPath: logPath, Dir: serviceDir(cfg, svc),
 		Root: wt.Toplevel, URL: pcli.URLPublic(name),
 		Command: full, Pub: svc.Pub, Internal: svc.Internal, DB: dbURLEnv,
+		Key: svc.Key, Open: svc.Open,
 	})
 	fmt.Fprintf(stdout, "%s started (pid %d) -> %s\n", name, pid, logPath)
 	if svc.DB && cfg.DB != nil {
